@@ -1,0 +1,30 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# PyInstaller / Build
+build/
+dist/
+*.spec
+*.exe
+
+# Ambientes Virtuais
+.venv/
+venv/
+ENV/
+env/
+
+# IDEs e Editores
+.vscode/
+.idea/
+.cursor/
+.cursorrules
+*.swp
+*.swo
+.agents/
+
+# Logs e Dados OS
+*.log
+.DS_Store
+Thumbs.db
