@@ -1,0 +1,51 @@
+==================================================
+ DEFINITIVE PROJECT COMPILATION GUIDE
+==================================================
+[!] ATTENTION:
+PyInstaller does NOT support "cross-compilation" (Cross-Compilation).
+If you want an executable for Windows (.exe), you must run the steps below INSIDE Windows. If you want it for Mac, you must run it on Mac. If you want it for Linux, run it on Linux.
+
+--------------------------------------------------
+ STEP 1: Environment Setup
+--------------------------------------------------
+1. Make sure you have Python 3.8 or higher installed on your machine.
+2. Open the terminal and navigate to the root of the project.
+3. Create a clean virtual environment to avoid conflicts with your system:
+   (Windows) > python -m venv .venv
+   (Mac/Linux) $ python3 -m venv .venv
+
+4. Activate the virtual environment:
+   (Windows) > .venv\Scripts\activate
+   (Mac/Linux) $ source .venv/bin/activate
+
+5. Install the dependencies (Pygame Engine and PyInstaller Bundler):
+   > pip install -r requirements.txt
+
+--------------------------------------------------
+ STEP 2: The Build Process (Compilation)
+--------------------------------------------------
+With the dependencies installed, run the packaging command in the root of the project.
+We will use "run_game.py" as the anchor point (Entry Point) to ensure that the entire architecture of the "src/" folder is mapped.
+
+> pyinstaller --noconsole --onefile --name "CastleNight" --hidden-import pygame run_game.py
+
+[Flag Meanings]:
+--noconsole: Hides the background black terminal screen, running the game immersively.
+--onefile: Encompasses all Python scripts and libraries into a single binary package.
+--name: Names the final artifact as "CastleNight".
+--hidden-import pygame : Forces the bundler to pull the heavy dependency (Pygame) under the hood.
+
+--------------------------------------------------
+ STEP 3: Preparing the Release
+--------------------------------------------------
+After compilation, PyInstaller will create two folders in your project: 'build/' and 'dist/'.
+
+1. The compiled file will be inside the "dist/" folder.
+   - On Windows: dist/CastleNight.exe
+   - On Mac/Linux: dist/CastleNight (No extension)
+
+2. IMPORTANT: For the game to find the sprites and sounds, copy the "assets/" folder located at the root of the project and paste it inside the "dist/" folder, exactly side by side with the executable.
+
+[Your Executable] and the [assets/ Folder] must coexist together in the same folder.
+
+3. After following the steps above, everything is ready. The "dist/" folder and its contents can now be distributed to any player without the need to install Python.
