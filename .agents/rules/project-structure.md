@@ -7,7 +7,7 @@ Você (Agente de IA) deve operar estritamente dentro da topologia de diretórios
 Abaixo está a árvore oficial do repositório, incluindo o harness agêntico e a estrutura de módulos.
 
 ```text
-project_pygame/
+Castle-Night-Pygame/
 ├── AGENTS.md                         # Manifesto Mestre do Harness (Raiz do Projeto)
 ├── .agents/                          # Diretório de Suporte Agêntico
 │   ├── persona/

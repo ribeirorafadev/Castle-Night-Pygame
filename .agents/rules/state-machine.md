@@ -1,4 +1,4 @@
-# Rules: State Machine & Game Flow (state_machine.md)
+# Rules: State Machine & Game Flow (state-machine.md)
 
 ## 1. Escopo Arquitetural
 Este documento define as regras estritas para o controle do fluxo de execução do jogo através do padrão de projeto **State**. O motor do jogo não deve conter lógicas de espaguete (`if estado == "menu": faz_isso() else: faz_aquilo()`). O fluxo deve ser modularizado, garantindo que cada tela gerencie seu próprio ciclo de renderização e eventos, facilitando a defesa da arquitetura perante a banca avaliadora por ser um design limpo e de fácil leitura humana.

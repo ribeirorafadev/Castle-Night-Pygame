@@ -1,4 +1,4 @@
-# Rules: Pygame & SOLID Architecture (pygame_solid.md)
+# Rules: Pygame & SOLID Architecture (pygame-solid.md)
 
 ## 1. Escopo de Regras
 Este documento define as diretrizes estritas de codificação, arquitetura e formatação para o desenvolvimento do jogo 2D. O descumprimento destas regras resultará em falhas de arquitetura, acoplamento indevido ou rejeição na avaliação da banca acadêmica.

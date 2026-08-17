@@ -3,7 +3,7 @@ name: hud-decoupling
 description: Use quando for projetar, renderizar ou atualizar elementos de interface visual (barras de vida, medidores do boss, contadores de ondas/FPS, overlays de controles) isolados da lógica de estado.
 ---
 
-# Desacoplameto de HUD & UI
+# Desacoplamento de HUD & UI
 
 ## Visão Geral
 Diretrizes para isolar a renderização da interface de usuário (UI), barras de vida, sombras de texto (drop shadows) e overlays em glassmorphism da lógica de estado do jogo.
