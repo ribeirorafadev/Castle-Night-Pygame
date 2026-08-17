@@ -54,6 +54,6 @@ class Entity(ABC):
 ## 5. Clean Code e Documentação Defensiva
 Como o projeto será avaliado por uma banca acadêmica, a legibilidade do código atua como justificativa em tempo de leitura. A banca precisa de uma interpretação fluida.
 
-* **Sem "Magic Numbers":** Limites de tela, quantidade máxima de inimigos (40) e configurações de *cooldown* não devem ser *hardcoded* no meio do código. Extraia-os para constantes no topo do arquivo ou em um arquivo separado (ex: `SETTINGS.py`).
+* **Sem "Magic Numbers":** Limites de tela, quantidade máxima de inimigos (40) e configurações de *cooldown* não devem ser *hardcoded* no meio do código. Extraia-os para constantes no topo do arquivo ou em um arquivo separado (ex: `src/utils/settings.py`).
 * **Nomenclatura Descritiva:** Nomes de variáveis devem representar seu estado exato (`is_defending` no lugar de `def`, `check_win_condition` no lugar de `check`).
 * **Comentários Táticos:** Comente **exclusivamente** o "porquê" de lógicas não evidentes. Se a matemática de colisão no `CombatMediator` utilizar detecção de intersecção complexa ou se houver uma rotina de deleção de memória no *Proxy*, adicione um bloco de comentário conciso. O "o que" o código faz deve ser autoexplicativo pela sua nomenclatura.
