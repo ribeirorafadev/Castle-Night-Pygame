@@ -22,7 +22,6 @@ env/
 .cursorrules
 *.swp
 *.swo
-.agents/
 
 # Logs e Dados OS
 *.log
