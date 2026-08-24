@@ -1,449 +1,520 @@
-import pygame
-import random
-import math
-from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
-from src.utils.asset_loader import AssetLoader
+"""State machine implementation for Castle Night.
 
-from src.entities.hero import Hero
-from src.entities.factory import EntityFactory
+Provides concrete state classes (MenuState, LevelState) orchestrating
+the main game loop, user inputs, entity updates, and UI rendering.
+"""
+from __future__ import annotations
+
+import math
+import random
+from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING, List
+
+import pygame
+
 from src.core.mediator import CombatMediator
+from src.core.proxy import LevelProgressProxy
+from src.entities.entity import Entity
+from src.entities.factory import EntityFactory
+from src.entities.hero import Hero
+from src.ui.hud import HUDManager
 from src.utils import settings
+from src.utils.asset_loader import AssetLoader
 
 if TYPE_CHECKING:
     from src.core.game import Game
 
 
 class IState(ABC):
-    """Interface para o Padrão de Projeto Comportamental 'State'. Delega a execução do loop principal para classes de estado específicas."""
+    """Interface for the State design pattern. Delegates main loop execution to state classes."""
+
     @abstractmethod
     def run(self, dt: float) -> None:
+        """Execute a single frame update and render pass."""
         pass
 
 
 class MenuState(IState):
-    def __init__(self, game: 'Game') -> None:
-        self._game = game
-        self._font = pygame.font.Font(None, 36)
-        
-        # Carregamento seguro baseado no AssetLoader
-        self._bg_image = AssetLoader.load_image("sprites/background/Menu.png")
-        # A função smoothscale foi escolhida para prevenir a distorção dos pixels ao comprimir 
-        # a imagem de 1080p para a resolução da tela, demonstrando domínio técnico de UI para a banca avaliadora.
-        self._bg_image = pygame.transform.smoothscale(
-            self._bg_image,
-            (self._game.window.get_width(), self._game.window.get_height())
+    """Medieval main menu state featuring interactive navigation, controls modal, and retro aesthetics."""
+
+    def __init__(self, game: Game) -> None:
+        self._game: Game = game
+        self._font_small: pygame.font.Font = pygame.font.Font(None, 22)
+        self._font: pygame.font.Font = pygame.font.Font(None, 32)
+        self._font_large: pygame.font.Font = pygame.font.Font(None, 44)
+        self._font_title: pygame.font.Font = pygame.font.Font(None, 76)
+
+        # Scale background to current window dimensions
+        raw_bg = AssetLoader.load_image("sprites/background/Menu.png")
+        self._bg_image: pygame.Surface = pygame.transform.smoothscale(
+            raw_bg,
+            (self._game.window.get_width(), self._game.window.get_height()),
         )
-        
-        # Uso do fluxo dedicado de BGM para evitar sobreposição (overlap) de canais
+
+        # Dedicated fullscreen overlay surface
+        self._overlay: pygame.Surface = pygame.Surface(
+            (settings.SCREEN_WIDTH, settings.SCREEN_HEIGHT),
+            pygame.SRCALPHA,
+        )
+
+        self._menu_options: list[str] = [
+            "INICIAR JORNADA",
+            "GUIA DE CONTROLES",
+            "SAIR DO JOGO",
+        ]
+        self._selected_index: int = 0
+        self._show_controls_modal: bool = False
+
+        # Play dedicated menu BGM
         pygame.mixer.music.load(AssetLoader._get_path("audio/Sound-Menu.mp3"))
         pygame.mixer.music.play(-1)
 
-    def run(self, dt: float) -> None:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                self._game.quit()
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_RETURN:
-                    # Encerra o áudio do menu
-                    pygame.mixer.music.stop()
-                    # Limpa a fila de eventos para evitar inputs acidentais na próxima tela
-                    pygame.event.clear()
-                    # Delega a mudança de estado para o Contexto, permitindo coleta do GC
-                    self._game.change_state(LevelState(self._game))
+    @property
+    def selected_index(self) -> int:
+        return self._selected_index
 
-        # Renderização do background substituindo a cor sólida
-        self._game.window.blit(self._bg_image, (0, 0))
+    def draw_controls(self) -> None:
+        """Render medieval glassmorphic controls guide overlay with styled key badges."""
+        screen_w = settings.SCREEN_WIDTH
+        screen_h = settings.SCREEN_HEIGHT
 
-        import math
-        
-        # 1. Overlay Escuro Translúcido (Glassmorphism) para destacar o texto
-        overlay = pygame.Surface((settings.SCREEN_WIDTH, settings.SCREEN_HEIGHT), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 160))
-        self._game.window.blit(overlay, (0, 0))
+        # 1. Dark Backdrop
+        modal_overlay = pygame.Surface((screen_w, screen_h), pygame.SRCALPHA)
+        modal_overlay.fill((0, 0, 0, 180))
+        self._game.window.blit(modal_overlay, (0, 0))
 
-        # 2 e 3. Pulsar Suave (math.sin) e Drop Shadow do Press Enter
-        ticks = pygame.time.get_ticks()
-        alpha = int(abs(math.sin(ticks / 400.0)) * 200) + 55
-        
-        start_prompt = self._font.render("Press Enter to start", True, (255, 255, 255))
-        start_prompt_shadow = self._font.render("Press Enter to start", True, (0, 0, 0))
-        start_prompt.set_alpha(alpha)
-        start_prompt_shadow.set_alpha(alpha)
-        
-        w, h = self._font.size("Press Enter to start")
-        prompt_x = settings.SCREEN_WIDTH // 2 - w // 2
-        prompt_y = 490
-        
-        self._game.window.blit(start_prompt_shadow, (prompt_x + 2, prompt_y + 2))
-        self._game.window.blit(start_prompt, (prompt_x, prompt_y))
+        # 2. Medieval Container Panel (Amplo para acomodar todas as legendas)
+        modal_w, modal_h = 660, 460
+        modal_x = (screen_w - modal_w) // 2
+        modal_y = (screen_h - modal_h) // 2
+        modal_rect = pygame.Rect(modal_x, modal_y, modal_w, modal_h)
 
-        # 4. Teclas Estilizadas (Boxes) com Drop Shadow
-        instructions_data = [
-            ("Key A", "Move to the Left"),
-            ("Key D", "Move to the Right"),
-            ("Space", "Jump"),
-            ("Left Shift", "Run"),
-            ("Key C", "Defend"),
-            ("Left Mouse button", "Attack 1"),
-            ("Right Mouse button", "Attack 2")
+        panel_bg = pygame.Surface((modal_w, modal_h), pygame.SRCALPHA)
+        panel_bg.fill((18, 16, 24, 235))
+        self._game.window.blit(panel_bg, modal_rect.topleft)
+        pygame.draw.rect(self._game.window, (218, 165, 32), modal_rect, width=2, border_radius=8)
+
+        # 3. Header Title
+        title_surf = self._font_large.render("GUIA DE CONTROLES", True, (255, 215, 0))
+        title_shad = self._font_large.render("GUIA DE CONTROLES", True, (0, 0, 0))
+        tx = modal_x + (modal_w - title_surf.get_width()) // 2
+        ty = modal_y + 20
+        self._game.window.blit(title_shad, (tx + 2, ty + 2))
+        self._game.window.blit(title_surf, (tx, ty))
+
+        # Gold accent divider line
+        div_y = ty + 38
+        pygame.draw.line(self._game.window, (180, 140, 40), (modal_x + 40, div_y), (modal_x + modal_w - 40, div_y), 2)
+        pygame.draw.rect(self._game.window, (255, 215, 0), (screen_w // 2 - 3, div_y - 2, 6, 6))
+
+        # 4. Instructions Mapping Table
+        instructions = [
+            ("A / D", "Mover para Esquerda / Direita"),
+            ("Space", "Pular / Salto"),
+            ("Left Shift", "Correr (Dash Attack)"),
+            ("Key C", "Bloquear / Defender com Escudo"),
+            ("Mouse Esq.", "Ataque com Espada 1"),
+            ("Mouse Dir.", "Ataque Especial 2"),
+            ("ESC", "Pausar o Jogo / Voltar"),
         ]
 
-        start_y = 110
-        center_x = settings.SCREEN_WIDTH // 2
-        for key_text, action_text in instructions_data:
+        start_y = modal_y + 75
+        center_split_x = modal_x + 230
+
+        for key_text, action_text in instructions:
             key_surface = self._font.render(key_text, True, (255, 255, 255))
             action_surface = self._font.render(action_text, True, (225, 173, 1))
             action_shadow = self._font.render(action_text, True, (0, 0, 0))
-            
-            box_padding_x = 12
-            box_padding_y = 6
+
+            box_padding_x, box_padding_y = 10, 4
             box_width = key_surface.get_width() + (box_padding_x * 2)
             box_height = key_surface.get_height() + (box_padding_y * 2)
-            
-            gap_from_center = 15
-            
-            # As caixas (teclas) alinham-se à direita antes do centro
-            start_x = center_x - box_width - gap_from_center
-            
-            # Sombra da tecla
-            box_rect_shadow = pygame.Rect(start_x + 3, start_y + 3, box_width, box_height)
-            pygame.draw.rect(self._game.window, (0, 0, 0), box_rect_shadow, border_radius=6)
-            
-            # Fundo vermelho da tecla
-            box_rect = pygame.Rect(start_x, start_y, box_width, box_height)
-            pygame.draw.rect(self._game.window, (204, 25, 25), box_rect, border_radius=6)
-            # Borda branca
-            pygame.draw.rect(self._game.window, (255, 255, 255), box_rect, width=2, border_radius=6)
-            
-            # Texto da tecla dentro da caixa
+            gap = 14
+
+            start_x = center_split_x - box_width - gap
+
+            # Key Box shadow and background
+            pygame.draw.rect(
+                self._game.window,
+                (0, 0, 0),
+                pygame.Rect(start_x + 2, start_y + 2, box_width, box_height),
+                border_radius=5,
+            )
+            key_rect = pygame.Rect(start_x, start_y, box_width, box_height)
+            pygame.draw.rect(self._game.window, (160, 20, 20), key_rect, border_radius=5)
+            pygame.draw.rect(self._game.window, (255, 215, 0), key_rect, width=1, border_radius=5)
+
             self._game.window.blit(key_surface, (start_x + box_padding_x, start_y + box_padding_y))
-            
-            # Ação alinhada à esquerda após o centro
-            action_x = center_x + gap_from_center
+
+            action_x = center_split_x + gap
             action_y = start_y + box_padding_y
             self._game.window.blit(action_shadow, (action_x + 2, action_y + 2))
             self._game.window.blit(action_surface, (action_x, action_y))
-            
-            start_y += box_height + 15
 
+            start_y += box_height + 10
 
-class LevelState(IState):
-    def __init__(self, game: 'Game') -> None:
-        self._game = game
-        self.hero = EntityFactory.create_hero(x=settings.SCREEN_WIDTH // 2, y=settings.FLOOR_HEIGHT)
-        self._font_go = pygame.font.Font(None, 72)
-        self._game_over_timer = 0.0
-        
-        self.enemies_to_boss: int = 20
-        self.boss_spawned: bool = False
-        self._shake_timer: float = 0.0
-        self.ui_font = pygame.font.Font(None, 28)
-        
-        self.enemies = []
-        self._display = pygame.Surface((settings.SCREEN_WIDTH, settings.SCREEN_HEIGHT))
-        
-        res = (settings.SCREEN_WIDTH, settings.SCREEN_HEIGHT)
-
-        self._bg_image = pygame.transform.smoothscale(AssetLoader.load_image('sprites/background/Background.png'), res)
-        self._mountains_image = pygame.transform.smoothscale(AssetLoader.load_image('sprites/background/Mountains.png'), res)
-        self._wall_windows_image = pygame.transform.smoothscale(AssetLoader.load_image('sprites/background/WallWindows.png'), res)
-        self._columns_flags_image = pygame.transform.smoothscale(AssetLoader.load_image('sprites/background/ColumnsFlags.png'), res)
-        self._statue_dragon_image = pygame.transform.smoothscale(AssetLoader.load_image('sprites/background/StatueDragon.png'), res)
-        self._candeliar_image = pygame.transform.smoothscale(AssetLoader.load_image('sprites/background/Candeliar.png'), res)
-        self._floor_image = pygame.transform.smoothscale(AssetLoader.load_image('sprites/background/Floor.png'), res)
-
-        pygame.mixer.music.load(AssetLoader._get_path('audio/Sound-Normal.mp3'))
-        pygame.mixer.music.play(-1)
-        
-        self._spawn_wave()
-        
-        self.mediator = CombatMediator(self.hero)
-
-    def _spawn_wave(self) -> None:
-        if self.enemies_to_boss <= 0:
-            if not self.boss_spawned:
-                boss = EntityFactory.create_enemy('boss-dragon', settings.SCREEN_WIDTH + 50.0, settings.FLOOR_HEIGHT)
-                boss.set_target(self.hero)
-                self.enemies.append(boss)
-                self.boss_spawned = True
-                self._shake_timer = 2.0
-                
-                pygame.mixer.music.load(AssetLoader._get_path('audio/Sound-Boss.mp3'))
-                pygame.mixer.music.play(-1)
-            return
-
-        types = ['minotaur', 'wizard', 'skeleton', 'werewolf', 'yokai']
-        
-        defeated = 20 - self.enemies_to_boss
-        
-        if defeated < 6:
-            num_right = 1
-            num_left = 1
-        elif defeated < 15:
-            num_right = 2
-            num_left = 1
-        else:
-            num_right = 2
-            num_left = 3
-            
-        total_enemies = num_right + num_left
-        total_enemies = min(total_enemies, self.enemies_to_boss)
-
-        # Distribuir os spawns limitados
-        spawn_sides = ['right'] * num_right + ['left'] * num_left
-        spawn_sides = spawn_sides[:total_enemies]
-        
-        for side in spawn_sides:
-            enemy_type = random.choice(types)
-            
-            if side == 'right':
-                spawn_x = settings.SCREEN_WIDTH + 50.0 + random.uniform(0, 80)
-            else:
-                spawn_x = -50.0 - random.uniform(0, 80)
-                
-            new_enemy = EntityFactory.create_enemy(enemy_type, spawn_x, settings.FLOOR_HEIGHT)
-            new_enemy.set_target(self.hero)
-            self.enemies.append(new_enemy)
-
-    def _draw_hud_panel(self, text: str, color: tuple, px: int, py: int, right_align: bool = False) -> None:
-        text_surface = self.ui_font.render(text, True, color)
-        shadow_surface = self.ui_font.render(text, True, (0, 0, 0))
-        
-        padding_x, padding_y = 12, 6
-        panel_w = text_surface.get_width() + (padding_x * 2)
-        panel_h = text_surface.get_height() + (padding_y * 2)
-        
-        if right_align:
-            px = px - panel_w
-            
-        panel = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
-        panel.fill((0, 0, 0, 160))
-        self._game.window.blit(panel, (px, py))
-        
-        text_x = px + padding_x
-        text_y = py + padding_y
-        self._game.window.blit(shadow_surface, (text_x + 2, text_y + 2))
-        self._game.window.blit(text_surface, (text_x, text_y))
+        # 5. Return Prompt
+        ticks = pygame.time.get_ticks()
+        pulse = int(abs(math.sin(ticks / 300.0)) * 155) + 100
+        close_surf = self._font_small.render("Pressione [ESC] ou [ENTER] para fechar", True, (255, 255, 255))
+        close_surf.set_alpha(pulse)
+        cx = modal_x + (modal_w - close_surf.get_width()) // 2
+        cy = modal_y + modal_h - 30
+        self._game.window.blit(close_surf, (cx, cy))
 
     def run(self, dt: float) -> None:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self._game.quit()
+                return
+            elif event.type == pygame.KEYDOWN:
+                if self._show_controls_modal:
+                    if event.key in (pygame.K_ESCAPE, pygame.K_RETURN, pygame.K_SPACE, pygame.K_BACKSPACE):
+                        self._show_controls_modal = False
+                else:
+                    if event.key in (pygame.K_UP, pygame.K_w):
+                        self._selected_index = (self._selected_index - 1) % len(self._menu_options)
+                    elif event.key in (pygame.K_DOWN, pygame.K_s):
+                        self._selected_index = (self._selected_index + 1) % len(self._menu_options)
+                    elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
+                        self._activate_option(self._selected_index)
+                        return
+                    elif event.key == pygame.K_1:
+                        self._activate_option(0)
+                        return
+                    elif event.key == pygame.K_2:
+                        self._activate_option(1)
+                    elif event.key in (pygame.K_3, pygame.K_ESCAPE):
+                        self._activate_option(2)
+                        return
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                if self._show_controls_modal:
+                    self._show_controls_modal = False
+                else:
+                    mx, my = pygame.mouse.get_pos()
+                    btn_w, btn_h = 320, 48
+                    btn_x = (settings.SCREEN_WIDTH - btn_w) // 2
+                    start_y = 280
+                    for i in range(len(self._menu_options)):
+                        opt_y = start_y + (i * (btn_h + 14))
+                        if pygame.Rect(btn_x, opt_y, btn_w, btn_h).collidepoint(mx, my):
+                            self._activate_option(i)
+                            return
+
+        # 1. Background image
+        self._game.window.blit(self._bg_image, (0, 0))
+
+        # 2. Translucent glassmorphism overlay
+        self._overlay.fill((10, 10, 16, 175))
+        self._game.window.blit(self._overlay, (0, 0))
+
+        # 3. Imposing Gothic/Medieval Game Title
+        title_text = "CASTLE NIGHT"
+        title_surf = self._font_title.render(title_text, True, (255, 215, 0))
+        title_shad = self._font_title.render(title_text, True, (0, 0, 0))
+        tx = (settings.SCREEN_WIDTH - title_surf.get_width()) // 2
+        ty = 85
+        self._game.window.blit(title_shad, (tx + 3, ty + 3))
+        self._game.window.blit(title_surf, (tx, ty))
+
+        # Subtitle banner
+        sub_text = "— Demo 2D Metroidvania em Pygame —"
+        sub_surf = self._font_small.render(sub_text, True, (200, 190, 210))
+        sx = (settings.SCREEN_WIDTH - sub_surf.get_width()) // 2
+        sy = ty + 70
+        self._game.window.blit(sub_surf, (sx, sy))
+
+        # 4. Interactive Medieval Navigation Menu
+        btn_w, btn_h = 320, 48
+        btn_x = (settings.SCREEN_WIDTH - btn_w) // 2
+        start_y = 280
+
+        ticks = pygame.time.get_ticks()
+        pulse_alpha = int(abs(math.sin(ticks / 280.0)) * 90) + 165
+
+        for i, option_text in enumerate(self._menu_options):
+            opt_y = start_y + (i * (btn_h + 14))
+            btn_rect = pygame.Rect(btn_x, opt_y, btn_w, btn_h)
+
+            is_selected = (i == self._selected_index)
+
+            # Check mouse hover for responsive feedback
+            mx, my = pygame.mouse.get_pos()
+            if btn_rect.collidepoint(mx, my):
+                self._selected_index = i
+                is_selected = True
+
+            # Button drop shadow
+            shadow_rect = pygame.Rect(btn_x + 3, opt_y + 3, btn_w, btn_h)
+            pygame.draw.rect(self._game.window, (0, 0, 0), shadow_rect, border_radius=8)
+
+            if is_selected:
+                btn_surf = pygame.Surface((btn_w, btn_h), pygame.SRCALPHA)
+                btn_surf.fill((65, 45, 20, pulse_alpha))
+                self._game.window.blit(btn_surf, btn_rect.topleft)
+                pygame.draw.rect(self._game.window, (255, 215, 0), btn_rect, width=2, border_radius=8)
+
+                label_text = f">  {option_text}  <"
+                label_color = (255, 225, 90)
+            else:
+                btn_surf = pygame.Surface((btn_w, btn_h), pygame.SRCALPHA)
+                btn_surf.fill((22, 22, 32, 160))
+                self._game.window.blit(btn_surf, btn_rect.topleft)
+                pygame.draw.rect(self._game.window, (80, 85, 105), btn_rect, width=1, border_radius=8)
+
+                label_text = option_text
+                label_color = (230, 230, 240)
+
+            opt_surf = self._font.render(label_text, True, label_color)
+            opt_shad = self._font.render(label_text, True, (0, 0, 0))
+            lx = btn_x + (btn_w - opt_surf.get_width()) // 2
+            ly = opt_y + (btn_h - opt_surf.get_height()) // 2
+            self._game.window.blit(opt_shad, (lx + 2, ly + 2))
+            self._game.window.blit(opt_surf, (lx, ly))
+
+        # 5. Bottom Navigation Hints
+        nav_hint = "[W/S / Setas] Navegar  •  [ENTER] Selecionar  •  [1-3] Atalhos"
+        hint_surf = self._font_small.render(nav_hint, True, (160, 165, 185))
+        hx = (settings.SCREEN_WIDTH - hint_surf.get_width()) // 2
+        hy = settings.SCREEN_HEIGHT - 45
+        self._game.window.blit(hint_surf, (hx, hy))
+
+        # 6. Controls Modal Overlay (if toggled)
+        if self._show_controls_modal:
+            self.draw_controls()
+
+    def _activate_option(self, index: int) -> None:
+        """Handle execution of the selected menu item."""
+        if index == 0:  # Iniciar Jornada
+            pygame.mixer.music.stop()
+            pygame.event.clear()
+            self._game.change_state(LevelState(self._game))
+        elif index == 1:  # Guia de Controles
+            self._show_controls_modal = True
+        elif index == 2:  # Sair do Jogo
+            self._game.quit()
+
+
+class LevelState(IState):
+    """Orchestrator state for gameplay, delegating UI, combat, pause, and progression."""
+
+    def __init__(self, game: Game) -> None:
+        self._game: Game = game
+        self.hero: Hero = EntityFactory.create_hero(
+            x=settings.SCREEN_WIDTH // 2,
+            y=settings.FLOOR_HEIGHT,
+        )
+        self.mediator: CombatMediator = CombatMediator(self.hero)
+        self._proxy: LevelProgressProxy = LevelProgressProxy(EntityFactory)
+        self._hud: HUDManager = HUDManager()
+
+        self.enemies: List[Entity] = []
+        self._shake_timer: float = 0.0
+        self._game_over_timer: float = 0.0
+        self._boss_music_started: bool = False
+
+        # In-game pause management
+        self._is_paused: bool = False
+        self._pause_selected_index: int = 0
+
+        # Pre-scale parallax background surfaces
+        res = (settings.SCREEN_WIDTH, settings.SCREEN_HEIGHT)
+        self._display: pygame.Surface = pygame.Surface(res)
+        self._bg_layers: list[pygame.Surface] = [
+            pygame.transform.smoothscale(AssetLoader.load_image('sprites/background/Background.png'), res),
+            pygame.transform.smoothscale(AssetLoader.load_image('sprites/background/Mountains.png'), res),
+            pygame.transform.smoothscale(AssetLoader.load_image('sprites/background/WallWindows.png'), res),
+            pygame.transform.smoothscale(AssetLoader.load_image('sprites/background/ColumnsFlags.png'), res),
+            pygame.transform.smoothscale(AssetLoader.load_image('sprites/background/StatueDragon.png'), res),
+            pygame.transform.smoothscale(AssetLoader.load_image('sprites/background/Candeliar.png'), res),
+            pygame.transform.smoothscale(AssetLoader.load_image('sprites/background/Floor.png'), res),
+        ]
+
+        pygame.mixer.music.load(AssetLoader._get_path('audio/Sound-Normal.mp3'))
+        pygame.mixer.music.play(-1)
+
+        # Spawn initial wave
+        self._spawn_wave()
+
+    @property
+    def is_paused(self) -> bool:
+        return self._is_paused
+
+    @is_paused.setter
+    def is_paused(self, value: bool) -> None:
+        self._is_paused = value
+
+    @property
+    def pause_selected_index(self) -> int:
+        return self._pause_selected_index
+
+    @pause_selected_index.setter
+    def pause_selected_index(self, value: int) -> None:
+        self._pause_selected_index = value
+
+    @property
+    def boss_spawned(self) -> bool:
+        return self._proxy.boss_spawned
+
+    @boss_spawned.setter
+    def boss_spawned(self, value: bool) -> None:
+        self._proxy.boss_spawned = value
+
+    @property
+    def boss_defeated(self) -> bool:
+        return self._proxy.boss_defeated
+
+    @boss_defeated.setter
+    def boss_defeated(self, value: bool) -> None:
+        self._proxy.boss_defeated = value
+
+    @property
+    def enemies_to_boss(self) -> int:
+        return self._proxy.enemies_remaining
+
+    @enemies_to_boss.setter
+    def enemies_to_boss(self, value: int) -> None:
+        self._proxy._enemies_killed = max(0, self._proxy.total_enemies - value)
+
+    def _spawn_wave(self) -> None:
+        """Delegate enemy wave or boss generation to LevelProgressProxy."""
+        new_enemies = self._proxy.request_spawn(self.hero, self.enemies)
+        if self._proxy.boss_spawned and not self._boss_music_started:
+            self._boss_music_started = True
+            self._shake_timer = 2.0
+            pygame.mixer.music.load(AssetLoader._get_path('audio/Sound-Boss.mp3'))
+            pygame.mixer.music.play(-1)
+        self.enemies.extend(new_enemies)
+
+    def run(self, dt: float) -> None:
+        # 1. Process events (including Pause toggling and navigation)
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self._game.quit()
+                return
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
-                    pygame.mixer.stop()
-                    pygame.mixer.music.stop()
-                    # Limpa a fila de eventos ao sair para manter isolamento de contexto
-                    pygame.event.clear()
-                    # Retorna ao estado anterior por delegação
-                    self._game.change_state(MenuState(self._game))
+                    self._is_paused = not self._is_paused
+                    if self._is_paused:
+                        pygame.mixer.music.pause()
+                    else:
+                        pygame.mixer.music.unpause()
+                elif self._is_paused:
+                    if event.key in (pygame.K_UP, pygame.K_w):
+                        self._pause_selected_index = (self._pause_selected_index - 1) % 2
+                    elif event.key in (pygame.K_DOWN, pygame.K_s):
+                        self._pause_selected_index = (self._pause_selected_index + 1) % 2
+                    elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
+                        if self._pause_selected_index == 0:  # Continuar
+                            self._is_paused = False
+                            pygame.mixer.music.unpause()
+                        elif self._pause_selected_index == 1:  # Voltar ao Menu
+                            pygame.mixer.stop()
+                            pygame.mixer.music.stop()
+                            pygame.event.clear()
+                            self._game.change_state(MenuState(self._game))
+                            return
 
-        self._display.blit(self._bg_image, (0, 0))
-        self._display.blit(self._mountains_image, (0, 0))
-        self._display.blit(self._wall_windows_image, (0, 0))
-        self._display.blit(self._columns_flags_image, (0, 0))
-        self._display.blit(self._statue_dragon_image, (0, 0))
-        self._display.blit(self._candeliar_image, (0, 0))
-        self._display.blit(self._floor_image, (0, 0))
+        # 2. Render background layers
+        for layer in self._bg_layers:
+            self._display.blit(layer, (0, 0))
 
-        is_win = getattr(self, 'boss_defeated', False)
-        
+        # 3. Paused State Branch (Freeze physics, timers, wave spawn, and combat)
+        if self._is_paused:
+            self.hero.draw(self._display)
+            for enemy in self.enemies:
+                enemy.draw(self._display)
+                self._hud.draw_enemy_health_bar(self._display, enemy)
+
+            # Draw standard HUD underneath modal
+            self._hud.draw_player_hp(self._display, hp=self.hero.hp, max_hp=self.hero.max_hp)
+            self._hud.draw_wave_progress(
+                self._display,
+                enemies_remaining=self._proxy.enemies_remaining,
+                total_enemies=self._proxy.total_enemies,
+                is_boss_active=self._proxy.boss_spawned,
+            )
+            self._hud.draw_fps(self._display, fps=self._game.fps)
+
+            if self._proxy.boss_spawned:
+                boss = next((e for e in self.enemies if getattr(e, 'is_boss', False) or getattr(e, '_name', '') == 'DragonBoss'), None)
+                if boss and boss.hp > 0:
+                    self._hud.draw_boss_hp(self._display, hp=boss.hp, max_hp=boss.max_hp, boss_name="DRAGON BOSS")
+
+            self._game.window.fill((0, 0, 0))
+            self._game.window.blit(self._display, (0, 0))
+
+            # Draw Pause Modal onto main window
+            self._hud.draw_pause_menu(self._game.window, self._pause_selected_index)
+            return
+
+        # 4. Active Gameplay: Update and render entities
+        is_victory = self._proxy.is_victory
         self.hero.update(dt)
         self.hero.draw(self._display)
-        
+
         for enemy in self.enemies:
-            # Hit-stop: congela os inimigos menores quando a tela de Win ou Death está ativa
-            enemy_dt = 0.0 if (self.hero.hp <= 0 or is_win) and getattr(enemy, '_name', '') != 'DragonBoss' else dt
+            is_boss = getattr(enemy, 'is_boss', False) or getattr(enemy, '_name', '') == 'DragonBoss'
+            enemy_dt = 0.0 if (self.hero.hp <= 0 or is_victory) and not is_boss else dt
             enemy.update(enemy_dt)
             enemy.draw(self._display)
-        
-        alive_enemies = []
+            self._hud.draw_enemy_health_bar(self._display, enemy)
+
+        # 5. Clean up defeated entities via proxy registration
+        alive_enemies: list[Entity] = []
         for enemy in self.enemies:
             if enemy.is_removable:
-                if getattr(enemy, '_name', '') != 'DragonBoss':
-                    self.enemies_to_boss -= 1
+                self._proxy.register_kill(enemy)
             else:
                 alive_enemies.append(enemy)
-        # Rotina de Garbage Collection manual: Desaloca instâncias mortas da RAM para prevenir Memory Leaks.
         self.enemies = alive_enemies
-            
-        if self.hero.hp > 0 and not is_win:
+
+        # 6. Resolve combat collisions
+        if self.hero.hp > 0 and not is_victory:
             self.mediator.update(self.enemies)
 
-        # HUD: Barra de Vida do Herói Dinâmica
-        hp_max_width = 240
-        hp_height = 22
-        x, y = 20, 20
-        
-        pygame.draw.rect(self._display, (0, 0, 0), (x + 3, y + 3, hp_max_width, hp_height), border_radius=4)
-        pygame.draw.rect(self._display, (40, 40, 40), (x - 2, y - 2, hp_max_width + 4, hp_height + 4), border_radius=4)
-        pygame.draw.rect(self._display, (20, 20, 20), (x, y, hp_max_width, hp_height))
-        
-        hp_width = max(0, int((self.hero.hp / 100.0) * hp_max_width))
-        
-        # Lógica de cores baseada na vida (Verde -> Laranja -> Vermelho Piscante)
-        if self.hero.hp > 50:
-            hp_color = (0, 200, 0)
-        elif self.hero.hp > 20:
-            hp_color = (255, 140, 0)
-        else:
-            if (pygame.time.get_ticks() // 200) % 2 == 0:
-                hp_color = (255, 0, 0)
-            else:
-                hp_color = (139, 0, 0)
-        
-        if hp_width > 0:
-            pygame.draw.rect(self._display, hp_color, (x, y, hp_width, hp_height))
-            pygame.draw.rect(self._display, (255, 255, 255), (x, y, hp_width, max(1, int(hp_height * 0.2))), border_radius=1)
+        # 7. Render HUD elements via HUDManager
+        self._hud.draw_player_hp(self._display, hp=self.hero.hp, max_hp=self.hero.max_hp)
+        self._hud.draw_wave_progress(
+            self._display,
+            enemies_remaining=self._proxy.enemies_remaining,
+            total_enemies=self._proxy.total_enemies,
+            is_boss_active=self._proxy.boss_spawned,
+        )
+        self._hud.draw_fps(self._display, fps=self._game.fps)
 
-        # Atualizando target do _draw_hud_panel temporariamente mudando seu comportamento
-        # A própria função _draw_hud_panel desenhava em _game.window, então refatoramos ela
-        # Logo faremos uma correção rápida do _draw_hud_panel abaixo no chunk. 
-        # Na verdade, basta desenhar a HUD aqui:
+        if self._proxy.boss_spawned:
+            boss = next((e for e in self.enemies if getattr(e, 'is_boss', False) or getattr(e, '_name', '') == 'DragonBoss'), None)
+            if boss and boss.hp > 0:
+                self._hud.draw_boss_hp(self._display, hp=boss.hp, max_hp=boss.max_hp, boss_name="DRAGON BOSS")
 
-        # Draw FPS and Prog direct implementation
-        def draw_temp_hud(text, color, px, py, right_align=False, fill_ratio=0.0):
-            text_surf = self.ui_font.render(text, True, color)
-            shad_surf = self.ui_font.render(text, True, (0, 0, 0))
-            pad_x, pad_y = 12, 6
-            pw = text_surf.get_width() + pad_x*2
-            ph = text_surf.get_height() + pad_y*2
-            if right_align: px -= pw
-            pnl = pygame.Surface((pw, ph), pygame.SRCALPHA)
-            pnl.fill((0, 0, 0, 160))
-            self._display.blit(pnl, (px, py))
-            
-            if fill_ratio > 0:
-                fill_w = int(pw * fill_ratio)
-                pygame.draw.rect(self._display, (138, 43, 226), (px, py, fill_w, ph))
-                # Borda brilhante no preenchimento
-                pygame.draw.rect(self._display, (200, 100, 255), (px, py, fill_w, 2))
-                
-            self._display.blit(shad_surf, (px+pad_x+2, py+pad_y+2))
-            self._display.blit(text_surf, (px+pad_x, py+pad_y))
-
-        rage_ratio = max(0.0, min(1.0, (20 - self.enemies_to_boss) / 20.0))
-
-        if not self.boss_spawned:
-            prog_str = f"Enemies to Boss: {max(0, self.enemies_to_boss)}"
-            prog_color = (255, 215, 0)
-        else:
-            prog_str = "Defeat the Dragon!"
-            fire_colors = [(255, 69, 0), (255, 140, 0), (255, 215, 0)]
-            color_idx = (pygame.time.get_ticks() // 100) % len(fire_colors)
-            prog_color = fire_colors[color_idx]
-
-        draw_temp_hud(f"FPS: {int(self._game.fps)}", (255, 255, 255), 20, settings.SCREEN_HEIGHT - 55)
-        draw_temp_hud(prog_str, prog_color, settings.SCREEN_WIDTH - 20, settings.SCREEN_HEIGHT - 55, right_align=True, fill_ratio=rage_ratio)
-
-        # BOSS HUD
-        if self.boss_spawned:
-            boss = next((e for e in self.enemies if getattr(e, '_name', '') == 'DragonBoss'), None)
-            if boss and boss._hp > 0:
-                bw, bh = 600, 24
-                bx = settings.SCREEN_WIDTH // 2 - bw // 2
-                by = settings.SCREEN_HEIGHT - 90
-                
-                # Nome do boss
-                boss_name = self.ui_font.render("DRAGON BOSS", True, (255, 50, 50))
-                self._display.blit(boss_name, (settings.SCREEN_WIDTH // 2 - boss_name.get_width() // 2, by - 25))
-                
-                # Fundo e borda
-                pygame.draw.rect(self._display, (40, 40, 40), (bx - 2, by - 2, bw + 4, bh + 4), border_radius=4)
-                pygame.draw.rect(self._display, (20, 20, 20), (bx, by, bw, bh))
-                
-                # Vida
-                bhp_w = max(0, int((boss._hp / boss.max_hp) * bw))
-                if bhp_w > 0:
-                    pygame.draw.rect(self._display, (220, 20, 20), (bx, by, bhp_w, bh))
-                    pygame.draw.rect(self._display, (255, 100, 100), (bx, by, bhp_w, max(1, int(bh * 0.2))))
-
+        # 8. Handle Game Over and Victory screens
         if self.hero.hp <= 0:
             self._game_over_timer += dt
-            
-            # 1. Overlay Escuro com Fade
-            alpha = min(200, int(self._game_over_timer * 100))
-            overlay = pygame.Surface((settings.SCREEN_WIDTH, settings.SCREEN_HEIGHT), pygame.SRCALPHA)
-            overlay.fill((0, 0, 0, alpha))
-            self._display.blit(overlay, (0, 0))
-            
-            # 2. Texto YOU DIED pulsante/lento
-            text_alpha = min(255, int(max(0.0, self._game_over_timer - 1.0) * 150))
-            go_text = self._font_go.render("YOU DIED", True, (180, 0, 0))
-            go_text.set_alpha(text_alpha)
-            self._display.blit(go_text, (settings.SCREEN_WIDTH // 2 - go_text.get_width() // 2, settings.SCREEN_HEIGHT // 2))
-            
-            # 3. Prompt de Retorno
-            if self._game_over_timer > 3.0:
-                prompt_alpha = int(abs(math.sin(self._game_over_timer * 3)) * 255)
-                prompt_text = self.ui_font.render("Press [ENTER] to return", True, (255, 255, 255))
-                prompt_text.set_alpha(prompt_alpha)
-                self._display.blit(prompt_text, (settings.SCREEN_WIDTH // 2 - prompt_text.get_width() // 2, settings.SCREEN_HEIGHT // 2 + 60))
-                
-                keys = pygame.key.get_pressed()
-                if keys[pygame.K_RETURN]:
-                    pygame.mixer.stop()
-                    pygame.mixer.music.stop()
-                    self._game.change_state(MenuState(self._game))
-                    return
+            self._hud.draw_game_over(self._display, timer=self._game_over_timer)
+            if self._game_over_timer > 3.0 and pygame.key.get_pressed()[pygame.K_RETURN]:
+                pygame.mixer.stop()
+                pygame.mixer.music.stop()
+                self._game.change_state(MenuState(self._game))
+                return
 
-        # WIN CONDITION
-        if self.boss_spawned:
-            if not getattr(self, 'boss_defeated', False):
-                boss = next((e for e in self.enemies if getattr(e, '_name', '') == 'DragonBoss'), None)
-                if boss and boss._hp <= 0:
-                    self.boss_defeated = True
-                    
-        if getattr(self, 'boss_defeated', False):
+        if is_victory:
             self._game_over_timer += dt
-            
-            # Glassmorphism overlay
-            overlay_alpha = min(160, int(self._game_over_timer * 80))
-            overlay = pygame.Surface((settings.SCREEN_WIDTH, settings.SCREEN_HEIGHT), pygame.SRCALPHA)
-            overlay.fill((0, 0, 0, overlay_alpha))
-            self._display.blit(overlay, (0, 0))
-            
-            panel_w, panel_h = 400, 250
-            panel_x = (settings.SCREEN_WIDTH - panel_w) // 2
-            panel_y = (settings.SCREEN_HEIGHT - panel_h) // 2
-            
-            # Desenha Painel Base
-            panel = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
-            panel.fill((20, 20, 25, int(overlay_alpha * 0.9)))
-            pygame.draw.rect(panel, (100, 100, 100, int(overlay_alpha)), (0, 0, panel_w, panel_h), width=2, border_radius=8)
-            self._display.blit(panel, (panel_x, panel_y))
-            
-            # Título Victory
-            win_text = self._font_go.render("VICTORY ACHIEVED", True, (255, 215, 0))
-            win_text.set_alpha(int(overlay_alpha * (255/160)))
-            self._display.blit(win_text, (settings.SCREEN_WIDTH // 2 - win_text.get_width() // 2, panel_y + 20))
-            
-            # Stats Text
-            stats_texts = [
-                f"Boss Defeated: Dragon Boss",
-                f"Horde Cleared: 20 / 20",
-                f"HP Remaining: {self.hero.hp}"
-            ]
-            for i, text in enumerate(stats_texts):
-                st_render = self.ui_font.render(text, True, (200, 200, 200))
-                st_render.set_alpha(int(overlay_alpha * (255/160)))
-                self._display.blit(st_render, (panel_x + 30, panel_y + 90 + (i * 30)))
-            
-            if self._game_over_timer > 2.0:
-                prompt_alpha = int(abs(math.sin(self._game_over_timer * 3)) * 255)
-                prompt_text = self.ui_font.render("Press [ENTER] to continue", True, (255, 255, 255))
-                prompt_text.set_alpha(prompt_alpha)
-                self._display.blit(prompt_text, (settings.SCREEN_WIDTH // 2 - prompt_text.get_width() // 2, panel_y + panel_h - 40))
-                
-                keys = pygame.key.get_pressed()
-                if keys[pygame.K_RETURN]:
-                    pygame.mixer.stop()
-                    pygame.mixer.music.stop()
-                    self._game.change_state(MenuState(self._game))
-                    return
+            self._hud.draw_victory_screen(
+                self._display,
+                timer=self._game_over_timer,
+                boss_name="Dragon Boss",
+                horde_cleared=self._proxy.defeated_count,
+                total_horde=self._proxy.total_enemies,
+                hp_remaining=self.hero.hp,
+            )
+            if self._game_over_timer > 2.0 and pygame.key.get_pressed()[pygame.K_RETURN]:
+                pygame.mixer.stop()
+                pygame.mixer.music.stop()
+                self._game.change_state(MenuState(self._game))
+                return
 
-        # Aplicação do Screen Shake
+        # 9. Apply screen shake and blit to main window
         shake_x, shake_y = 0, 0
         if self._shake_timer > 0:
             self._shake_timer -= dt
@@ -454,6 +525,6 @@ class LevelState(IState):
         self._game.window.fill((0, 0, 0))
         self._game.window.blit(self._display, (shake_x, shake_y))
 
-        # Invoca nova onda se limpou a tela e o herói está vivo
+        # 10. Trigger next wave if floor cleared
         if len(self.enemies) == 0 and self.hero.hp > 0:
             self._spawn_wave()
