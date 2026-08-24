@@ -1,37 +1,40 @@
+"""Behavioral Mediator pattern decoupling Hero and Enemy combat interactions and collisions."""
+
 from typing import List, TYPE_CHECKING
-from src.entities.hero import Hero
+from src.utils import settings
 
 if TYPE_CHECKING:
+    from src.entities.hero import Hero
     from src.entities.enemy import Enemy
+    from src.entities.entity import Entity
+
 
 class CombatMediator:
-    """Implementação do Padrão de Projeto Comportamental 'Mediator'. Desacopla as classes Hero e Enemy, centralizando a lógica matemática de colisão AABB (Axis-Aligned Bounding Box) em um juiz neutro (Single Responsibility Principle)."""
-    def __init__(self, hero: Hero) -> None:
-        self._hero = hero
+    """Mediator coordinating AABB collision checks, damage propagation, knockback, and blocking."""
 
-    def update(self, enemies: List['Enemy']) -> None:
+    def __init__(self, hero: 'Hero') -> None:
+        self._hero: 'Hero' = hero
+
+    def update(self, enemies: List['Entity']) -> None:
+        """Processes offensive hitboxes against target hurtboxes for all combatants."""
+        # 1. Hero attacking Enemies
         hitbox = self._hero.get_hitbox()
         if hitbox:
             for enemy in enemies:
                 if enemy.hp > 0 and hitbox.colliderect(enemy.hurtbox):
-                    enemy.take_damage(25)
-                    # Knockback (Stagger push)
+                    enemy.take_damage(self._hero.attack_damage)
                     direction = 1 if self._hero.rect.centerx < enemy.rect.centerx else -1
-                    enemy._pos.x += direction * 20
+                    enemy.apply_knockback(direction, settings.KNOCKBACK_FORCE)
                     self._hero.register_hit()
-                    break  # Atinge apenas um inimigo por swing de espada
+                    break  # Single target hit per swing
 
+        # 2. Enemies attacking Hero
         for enemy in enemies:
             if enemy.hp > 0 and self._hero.hp > 0:
                 enemy_hitbox = enemy.get_hitbox()
                 if enemy_hitbox and enemy_hitbox.colliderect(self._hero.hurtbox):
-                    # Verifica se o herói está defendendo e virado para o atacante
-                    is_facing_enemy = (self._hero.rect.centerx < enemy.rect.centerx and self._hero.facing_right) or \
-                                      (self._hero.rect.centerx > enemy.rect.centerx and not self._hero.facing_right)
-                    
-                    if self._hero.is_defending and is_facing_enemy:
+                    if self._hero.can_block(enemy.rect.centerx):
                         self._hero.block_hit()
                     else:
                         self._hero.take_damage(enemy.attack_damage)
-                        
                     enemy.register_hit()
