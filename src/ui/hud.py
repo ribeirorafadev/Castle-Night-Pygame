@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 class HUDManager:
     """Manager for heads-up display and game interface rendering.
-    
+
     Adheres strictly to SOLID Single Responsibility Principle:
     - Pure rendering methods (no game state mutation, no audio triggers).
     - Pre-allocates fonts and surface pools to eliminate runtime GC overhead.
@@ -62,7 +62,7 @@ class HUDManager:
 
         # Surface cache for glassmorphism panels keyed strictly by (width, height)
         self._surface_cache: dict[tuple[int, int], pygame.Surface] = {}
-        
+
         # Dedicated pre-allocated fullscreen overlay surface
         self._fullscreen_overlay: pygame.Surface = pygame.Surface(
             (settings.SCREEN_WIDTH, settings.SCREEN_HEIGHT)
@@ -75,7 +75,7 @@ class HUDManager:
 
     def _get_glass_surface(self, width: int, height: int) -> pygame.Surface:
         """Retrieve a cached surface for glassmorphism panels keyed strictly by (width, height).
-        
+
         Reuses surfaces of identical dimensions to guarantee zero memory
         allocations during the active 60 FPS gameplay loop.
         """
@@ -88,7 +88,7 @@ class HUDManager:
 
     def _get_overlay_surface(self, width: int, height: int) -> pygame.Surface:
         """Retrieve or resize the reusable fullscreen overlay surface."""
-        if (self._fullscreen_overlay.get_width() != width or 
+        if (self._fullscreen_overlay.get_width() != width or
                 self._fullscreen_overlay.get_height() != height):
             self._fullscreen_overlay = pygame.Surface((width, height))
             self._fullscreen_overlay.fill(self.COLOR_BLACK)
@@ -144,11 +144,11 @@ class HUDManager:
 
         if border_width > 0:
             pygame.draw.rect(
-                surface, 
-                border_color, 
-                rect, 
-                width=border_width, 
-                border_radius=border_radius
+                surface,
+                border_color,
+                rect,
+                width=border_width,
+                border_radius=border_radius,
             )
 
         # Subtle top edge glass sheen
@@ -165,11 +165,11 @@ class HUDManager:
         self,
         surface: pygame.Surface,
         hp: int | None = None,
-        max_hp: int = 100,
+        max_hp: int = settings.HERO_MAX_HP,
         x: int = 20,
         y: int = 20,
-        width: int = 240,
-        height: int = 22,
+        width: int = settings.HUD_HP_BAR_WIDTH,
+        height: int = settings.HUD_HP_BAR_HEIGHT,
         current_hp: int | None = None,
     ) -> None:
         """Render dynamic player health bar with medieval frames, sheen, and drop shadows."""
@@ -231,10 +231,10 @@ class HUDManager:
         self,
         surface: pygame.Surface,
         hp: int | None = None,
-        max_hp: int = 500,
+        max_hp: int = settings.BOSS_MAX_HP,
         boss_name: str = "DRAGON BOSS",
-        width: int = 600,
-        height: int = 24,
+        width: int = settings.HUD_BOSS_BAR_WIDTH,
+        height: int = settings.HUD_BOSS_BAR_HEIGHT,
         current_hp: int | None = None,
     ) -> None:
         """Render centered Dragon Boss health gauge with name header and fiery style."""
@@ -301,7 +301,7 @@ class HUDManager:
 
     def draw_enemy_health_bar(self, surface: pygame.Surface, enemy: Entity) -> None:
         """Render compact overhead health bar (40x5px) centered above enemy head.
-        
+
         Pure rendering function. Skips bosses, dead/removable entities, or entities at 0 HP.
         """
         if enemy is None or getattr(enemy, 'is_boss', False) or getattr(enemy, 'is_removable', False):
@@ -345,18 +345,18 @@ class HUDManager:
 
             # Top 1px specular highlight sheen for 8-bit medieval depth
             pygame.draw.line(
-                surface, 
-                (255, 120, 120), 
-                (bar_x, bar_y), 
-                (bar_x + fill_width - 1, bar_y), 
-                1
+                surface,
+                (255, 120, 120),
+                (bar_x, bar_y),
+                (bar_x + fill_width - 1, bar_y),
+                1,
             )
 
     def draw_wave_progress(
         self,
         surface: pygame.Surface,
         enemies_remaining: int | None = None,
-        total_enemies: int = 20,
+        total_enemies: int = settings.MAX_REGULAR_ENEMIES,
         is_boss_active: bool = False,
         x: int | None = None,
         y: int | None = None,
@@ -419,11 +419,11 @@ class HUDManager:
             pygame.draw.rect(surface, self.COLOR_PURPLE, fill_rect, border_radius=6)
             # Glowing accent top line
             pygame.draw.line(
-                surface, 
-                self.COLOR_PURPLE_LIGHT, 
-                (panel_x, panel_y), 
-                (panel_x + fill_w, panel_y), 
-                2
+                surface,
+                self.COLOR_PURPLE_LIGHT,
+                (panel_x, panel_y),
+                (panel_x + fill_w, panel_y),
+                2,
             )
 
         # Render text with drop shadow (centered inside panel)
@@ -563,7 +563,7 @@ class HUDManager:
                 pulse = int(abs(math.sin(pygame.time.get_ticks() / 250.0)) * 55) + 200
                 pulse_gold = (min(255, pulse), min(255, int(pulse * 0.85)), 20)
                 pygame.draw.rect(surface, pulse_gold, btn_rect, width=2, border_radius=6)
-                
+
                 # Specular top sheen
                 pygame.draw.line(surface, (255, 240, 180), (btn_x + 6, current_btn_y + 1), (btn_x + btn_w - 6, current_btn_y + 1), 1)
 
@@ -652,7 +652,7 @@ class HUDManager:
         timer: float | None = None,
         boss_name: str = "Dragon Boss",
         horde_cleared: int = 20,
-        total_horde: int = 20,
+        total_horde: int = settings.MAX_REGULAR_ENEMIES,
         hp_remaining: int = 100,
         elapsed_time: float | None = None,
         stats: dict | None = None,

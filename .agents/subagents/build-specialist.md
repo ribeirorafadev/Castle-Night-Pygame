@@ -3,7 +3,7 @@
 ## Papel & Domínio
 O **Build Specialist** é responsável pelas pipelines de compilação de executáveis, configuração do PyInstaller, resiliência de carregamento de assets estáticos e dependências de ambiente virtual.
 
-- **Arquivos Alvo Principais:** `run_game.py`, `requirements.txt`, `src/utils/asset_loader.py`, `docs/guide-compilation.txt`
+- **Arquivos Alvo Principais:** `run_game.py`, `requirements.txt`, `src/utils/asset_loader.py`, `docs/guide-compilation.md`
 - **Regras Associadas:** `.agents/rules/project-structure.md`
 - **Skills Associadas:** `.agents/skills/build-pipeline/`
 

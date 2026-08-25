@@ -26,11 +26,15 @@ if TYPE_CHECKING:
 
 
 class IState(ABC):
-    """Interface for the State design pattern. Delegates main loop execution to state classes."""
+    """Interface for the State design pattern delegating main loop execution to concrete states."""
 
     @abstractmethod
     def run(self, dt: float) -> None:
-        """Execute a single frame update and render pass."""
+        """Execute a single frame event polling, kinematic update, and render pass.
+
+        Args:
+            dt: Delta time elapsed since last frame in fractional seconds.
+        """
         pass
 
 
@@ -38,20 +42,25 @@ class MenuState(IState):
     """Medieval main menu state featuring interactive navigation, controls modal, and retro aesthetics."""
 
     def __init__(self, game: Game) -> None:
+        """Initialize menu resources, fonts, background surfaces, and music streaming.
+
+        Args:
+            game: Central Game engine instance controlling window and state transitions.
+        """
         self._game: Game = game
         self._font_small: pygame.font.Font = pygame.font.Font(None, 22)
         self._font: pygame.font.Font = pygame.font.Font(None, 32)
         self._font_large: pygame.font.Font = pygame.font.Font(None, 44)
         self._font_title: pygame.font.Font = pygame.font.Font(None, 76)
 
-        # Scale background to current window dimensions
+        # Scale background image to current window dimensions
         raw_bg = AssetLoader.load_image("sprites/background/Menu.png")
         self._bg_image: pygame.Surface = pygame.transform.smoothscale(
             raw_bg,
             (self._game.window.get_width(), self._game.window.get_height()),
         )
 
-        # Dedicated fullscreen overlay surface
+        # Dedicated pre-allocated fullscreen overlay surface for glassmorphism
         self._overlay: pygame.Surface = pygame.Surface(
             (settings.SCREEN_WIDTH, settings.SCREEN_HEIGHT),
             pygame.SRCALPHA,
@@ -65,12 +74,16 @@ class MenuState(IState):
         self._selected_index: int = 0
         self._show_controls_modal: bool = False
 
-        # Play dedicated menu BGM
-        pygame.mixer.music.load(AssetLoader._get_path("audio/Sound-Menu.mp3"))
-        pygame.mixer.music.play(-1)
+        # Play dedicated menu BGM via safe AssetLoader method
+        AssetLoader.play_music("audio/Sound-Menu.mp3", loops=-1)
 
     @property
     def selected_index(self) -> int:
+        """Current highlighted menu item index.
+
+        Returns:
+            int: 0-based index of highlighted option.
+        """
         return self._selected_index
 
     def draw_controls(self) -> None:
@@ -78,12 +91,12 @@ class MenuState(IState):
         screen_w = settings.SCREEN_WIDTH
         screen_h = settings.SCREEN_HEIGHT
 
-        # 1. Dark Backdrop
+        # 1. Dark Backdrop Overlay
         modal_overlay = pygame.Surface((screen_w, screen_h), pygame.SRCALPHA)
         modal_overlay.fill((0, 0, 0, 180))
         self._game.window.blit(modal_overlay, (0, 0))
 
-        # 2. Medieval Container Panel (Amplo para acomodar todas as legendas)
+        # 2. Medieval Container Panel (Broad panel to accommodate all legends)
         modal_w, modal_h = 660, 460
         modal_x = (screen_w - modal_w) // 2
         modal_y = (screen_h - modal_h) // 2
@@ -153,7 +166,7 @@ class MenuState(IState):
 
             start_y += box_height + 10
 
-        # 5. Return Prompt
+        # 5. Pulsating Return Prompt
         ticks = pygame.time.get_ticks()
         pulse = int(abs(math.sin(ticks / 300.0)) * 155) + 100
         close_surf = self._font_small.render("Pressione [ESC] ou [ENTER] para fechar", True, (255, 255, 255))
@@ -161,6 +174,7 @@ class MenuState(IState):
         cx = modal_x + (modal_w - close_surf.get_width()) // 2
         cy = modal_y + modal_h - 30
         self._game.window.blit(close_surf, (cx, cy))
+
 
     def run(self, dt: float) -> None:
         for event in pygame.event.get():
@@ -286,7 +300,7 @@ class MenuState(IState):
     def _activate_option(self, index: int) -> None:
         """Handle execution of the selected menu item."""
         if index == 0:  # Iniciar Jornada
-            pygame.mixer.music.stop()
+            AssetLoader.stop_music()
             pygame.event.clear()
             self._game.change_state(LevelState(self._game))
         elif index == 1:  # Guia de Controles
@@ -296,9 +310,14 @@ class MenuState(IState):
 
 
 class LevelState(IState):
-    """Orchestrator state for gameplay, delegating UI, combat, pause, and progression."""
+    """Orchestrator state for active gameplay, managing entities, combat, pause, and level progression."""
 
     def __init__(self, game: Game) -> None:
+        """Initialize level state, player entity, proxy, mediator, HUD manager, and parallax backgrounds.
+
+        Args:
+            game: Central Game engine instance controlling window and state transitions.
+        """
         self._game: Game = game
         self.hero: Hero = EntityFactory.create_hero(
             x=settings.SCREEN_WIDTH // 2,
@@ -313,11 +332,11 @@ class LevelState(IState):
         self._game_over_timer: float = 0.0
         self._boss_music_started: bool = False
 
-        # In-game pause management
+        # In-game pause modal management
         self._is_paused: bool = False
         self._pause_selected_index: int = 0
 
-        # Pre-scale parallax background surfaces
+        # Pre-scale parallax background surfaces to screen resolution
         res = (settings.SCREEN_WIDTH, settings.SCREEN_HEIGHT)
         self._display: pygame.Surface = pygame.Surface(res)
         self._bg_layers: list[pygame.Surface] = [
@@ -330,50 +349,99 @@ class LevelState(IState):
             pygame.transform.smoothscale(AssetLoader.load_image('sprites/background/Floor.png'), res),
         ]
 
-        pygame.mixer.music.load(AssetLoader._get_path('audio/Sound-Normal.mp3'))
-        pygame.mixer.music.play(-1)
+        AssetLoader.play_music('audio/Sound-Normal.mp3', loops=-1)
 
         # Spawn initial wave
         self._spawn_wave()
 
     @property
     def is_paused(self) -> bool:
+        """Whether gameplay is currently paused.
+
+        Returns:
+            bool: True if game loop is paused, False otherwise.
+        """
         return self._is_paused
 
     @is_paused.setter
     def is_paused(self, value: bool) -> None:
+        """Set in-game pause status flag.
+
+        Args:
+            value: Boolean value for paused state.
+        """
         self._is_paused = value
 
     @property
     def pause_selected_index(self) -> int:
+        """Currently highlighted option in the Pause modal menu.
+
+        Returns:
+            int: 0-based index of highlighted pause option.
+        """
         return self._pause_selected_index
 
     @pause_selected_index.setter
     def pause_selected_index(self, value: int) -> None:
+        """Set highlighted option in the Pause modal menu.
+
+        Args:
+            value: 0-based integer option index.
+        """
         self._pause_selected_index = value
 
     @property
     def boss_spawned(self) -> bool:
+        """Whether the DragonBoss encounter has been triggered.
+
+        Returns:
+            bool: True if boss has spawned, False otherwise.
+        """
         return self._proxy.boss_spawned
 
     @boss_spawned.setter
     def boss_spawned(self, value: bool) -> None:
+        """Set boss spawned state flag.
+
+        Args:
+            value: Boolean value for boss spawned status.
+        """
         self._proxy.boss_spawned = value
 
     @property
     def boss_defeated(self) -> bool:
+        """Whether the DragonBoss has been defeated.
+
+        Returns:
+            bool: True if boss is slain, False otherwise.
+        """
         return self._proxy.boss_defeated
 
     @boss_defeated.setter
     def boss_defeated(self, value: bool) -> None:
+        """Set boss defeated state flag.
+
+        Args:
+            value: Boolean value for boss defeated status.
+        """
         self._proxy.boss_defeated = value
 
     @property
     def enemies_to_boss(self) -> int:
+        """Number of regular enemies remaining before boss fight.
+
+        Returns:
+            int: Remaining enemy quota.
+        """
         return self._proxy.enemies_remaining
 
     @enemies_to_boss.setter
     def enemies_to_boss(self, value: int) -> None:
+        """Set remaining enemies quota by adjusting proxy defeated count.
+
+        Args:
+            value: Desired remaining enemy count.
+        """
         self._proxy._enemies_killed = max(0, self._proxy.total_enemies - value)
 
     def _spawn_wave(self) -> None:
@@ -381,12 +449,42 @@ class LevelState(IState):
         new_enemies = self._proxy.request_spawn(self.hero, self.enemies)
         if self._proxy.boss_spawned and not self._boss_music_started:
             self._boss_music_started = True
-            self._shake_timer = 2.0
-            pygame.mixer.music.load(AssetLoader._get_path('audio/Sound-Boss.mp3'))
-            pygame.mixer.music.play(-1)
+            self._shake_timer = settings.SCREEN_SHAKE_DURATION
+            AssetLoader.play_music('audio/Sound-Boss.mp3', loops=-1)
         self.enemies.extend(new_enemies)
 
+    def _return_to_menu(self) -> None:
+        """Stop all audio playback channels, clear pending input events, and return to main menu."""
+        AssetLoader.stop_all_sounds()
+        AssetLoader.stop_music()
+        pygame.event.clear()
+        self._game.change_state(MenuState(self._game))
+
+    def _render_hud(self) -> None:
+        """Render common HUD elements (Player HP, Wave meter, FPS badge, Boss Gauge)."""
+        self._hud.draw_player_hp(self._display, hp=self.hero.hp, max_hp=self.hero.max_hp)
+        self._hud.draw_wave_progress(
+            self._display,
+            enemies_remaining=self._proxy.enemies_remaining,
+            total_enemies=self._proxy.total_enemies,
+            is_boss_active=self._proxy.boss_spawned,
+        )
+        self._hud.draw_fps(self._display, fps=self._game.fps)
+
+        if self._proxy.boss_spawned:
+            boss = next(
+                (e for e in self.enemies if getattr(e, 'is_boss', False) or getattr(e, '_name', '') == 'DragonBoss'),
+                None,
+            )
+            if boss and boss.hp > 0:
+                self._hud.draw_boss_hp(self._display, hp=boss.hp, max_hp=boss.max_hp, boss_name="DRAGON BOSS")
+
     def run(self, dt: float) -> None:
+        """Execute gameplay frame lifecycle: event handling, physics simulation, combat, and rendering.
+
+        Args:
+            dt: Delta time elapsed since last frame in fractional seconds.
+        """
         # 1. Process events (including Pause toggling and navigation)
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -396,9 +494,9 @@ class LevelState(IState):
                 if event.key == pygame.K_ESCAPE:
                     self._is_paused = not self._is_paused
                     if self._is_paused:
-                        pygame.mixer.music.pause()
+                        AssetLoader.pause_music()
                     else:
-                        pygame.mixer.music.unpause()
+                        AssetLoader.unpause_music()
                 elif self._is_paused:
                     if event.key in (pygame.K_UP, pygame.K_w):
                         self._pause_selected_index = (self._pause_selected_index - 1) % 2
@@ -407,12 +505,9 @@ class LevelState(IState):
                     elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
                         if self._pause_selected_index == 0:  # Continuar
                             self._is_paused = False
-                            pygame.mixer.music.unpause()
+                            AssetLoader.unpause_music()
                         elif self._pause_selected_index == 1:  # Voltar ao Menu
-                            pygame.mixer.stop()
-                            pygame.mixer.music.stop()
-                            pygame.event.clear()
-                            self._game.change_state(MenuState(self._game))
+                            self._return_to_menu()
                             return
 
         # 2. Render background layers
@@ -426,20 +521,8 @@ class LevelState(IState):
                 enemy.draw(self._display)
                 self._hud.draw_enemy_health_bar(self._display, enemy)
 
-            # Draw standard HUD underneath modal
-            self._hud.draw_player_hp(self._display, hp=self.hero.hp, max_hp=self.hero.max_hp)
-            self._hud.draw_wave_progress(
-                self._display,
-                enemies_remaining=self._proxy.enemies_remaining,
-                total_enemies=self._proxy.total_enemies,
-                is_boss_active=self._proxy.boss_spawned,
-            )
-            self._hud.draw_fps(self._display, fps=self._game.fps)
-
-            if self._proxy.boss_spawned:
-                boss = next((e for e in self.enemies if getattr(e, 'is_boss', False) or getattr(e, '_name', '') == 'DragonBoss'), None)
-                if boss and boss.hp > 0:
-                    self._hud.draw_boss_hp(self._display, hp=boss.hp, max_hp=boss.max_hp, boss_name="DRAGON BOSS")
+            # Draw standard HUD underneath modal via extracted helper
+            self._render_hud()
 
             self._game.window.fill((0, 0, 0))
             self._game.window.blit(self._display, (0, 0))
@@ -473,29 +556,15 @@ class LevelState(IState):
         if self.hero.hp > 0 and not is_victory:
             self.mediator.update(self.enemies)
 
-        # 7. Render HUD elements via HUDManager
-        self._hud.draw_player_hp(self._display, hp=self.hero.hp, max_hp=self.hero.max_hp)
-        self._hud.draw_wave_progress(
-            self._display,
-            enemies_remaining=self._proxy.enemies_remaining,
-            total_enemies=self._proxy.total_enemies,
-            is_boss_active=self._proxy.boss_spawned,
-        )
-        self._hud.draw_fps(self._display, fps=self._game.fps)
-
-        if self._proxy.boss_spawned:
-            boss = next((e for e in self.enemies if getattr(e, 'is_boss', False) or getattr(e, '_name', '') == 'DragonBoss'), None)
-            if boss and boss.hp > 0:
-                self._hud.draw_boss_hp(self._display, hp=boss.hp, max_hp=boss.max_hp, boss_name="DRAGON BOSS")
+        # 7. Render HUD elements via extracted helper
+        self._render_hud()
 
         # 8. Handle Game Over and Victory screens
         if self.hero.hp <= 0:
             self._game_over_timer += dt
             self._hud.draw_game_over(self._display, timer=self._game_over_timer)
             if self._game_over_timer > 3.0 and pygame.key.get_pressed()[pygame.K_RETURN]:
-                pygame.mixer.stop()
-                pygame.mixer.music.stop()
-                self._game.change_state(MenuState(self._game))
+                self._return_to_menu()
                 return
 
         if is_victory:
@@ -509,16 +578,14 @@ class LevelState(IState):
                 hp_remaining=self.hero.hp,
             )
             if self._game_over_timer > 2.0 and pygame.key.get_pressed()[pygame.K_RETURN]:
-                pygame.mixer.stop()
-                pygame.mixer.music.stop()
-                self._game.change_state(MenuState(self._game))
+                self._return_to_menu()
                 return
 
         # 9. Apply screen shake and blit to main window
         shake_x, shake_y = 0, 0
         if self._shake_timer > 0:
             self._shake_timer -= dt
-            intensity = 8
+            intensity = settings.SCREEN_SHAKE_INTENSITY
             shake_x = random.randint(-intensity, intensity)
             shake_y = random.randint(-intensity, intensity)
 
@@ -528,3 +595,4 @@ class LevelState(IState):
         # 10. Trigger next wave if floor cleared
         if len(self.enemies) == 0 and self.hero.hp > 0:
             self._spawn_wave()
+

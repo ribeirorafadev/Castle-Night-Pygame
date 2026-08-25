@@ -1,5 +1,7 @@
 """Domain entity base class defining spatial, physical, and combat contracts."""
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from typing import Optional
 import pygame
@@ -25,12 +27,29 @@ class Entity(ABC):
         self._hp: int = self.max_hp
         self._is_removable: bool = False
         self._speed: float = speed
-        self._target: Optional['Entity'] = None
+        self._target: Optional[Entity] = None
 
     @property
     def name(self) -> str:
         """Read-only access to entity name."""
         return self._name
+
+    @property
+    def pos(self) -> Vector2:
+        """Spatial position vector."""
+        return self._pos
+
+    @property
+    def vel(self) -> Vector2:
+        """Spatial velocity vector."""
+        return self._vel
+
+    @staticmethod
+    def safe_normalize(vec: Vector2) -> Vector2:
+        """Safely normalizes a 2D vector, preventing ZeroDivisionError when magnitude is 0."""
+        if vec.length_squared() > 0.0:
+            return vec.normalize()
+        return Vector2(0.0, 0.0)
 
     @property
     def is_boss(self) -> bool:
@@ -66,7 +85,7 @@ class Entity(ABC):
         """Read-only access to the bounding box for AABB collision detection."""
         return self._rect
 
-    def set_target(self, target: 'Entity') -> None:
+    def set_target(self, target: Entity) -> None:
         """Assigns combat target entity."""
         self._target = target
 
