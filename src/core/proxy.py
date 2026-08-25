@@ -192,7 +192,7 @@ class LevelProgressProxy:
         total_to_spawn = min(num_right + num_left, self.enemies_remaining)
         spawn_sides = (["right"] * num_right + ["left"] * num_left)[:total_to_spawn]
 
-        enemy_types = ["minotaur", "wizard", "skeleton", "werewolf", "yokai"]
+        enemy_types = ["minotaur", "wizard", "satyr", "samurai-commander", "yokai"]
         floor_y = settings.FLOOR_HEIGHT
         screen_w = settings.SCREEN_WIDTH
 
