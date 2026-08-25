@@ -4,7 +4,7 @@ import random
 from typing import Optional, Dict, List, Any
 import pygame
 from src.entities.entity import Entity
-from src.utils.asset_loader import AssetLoader
+from src.utils.asset_loader import AssetLoader, DummySound
 from src.utils import settings
 
 
@@ -13,7 +13,7 @@ class Enemy(Entity):
 
     def __init__(self, name: str, surf: pygame.Surface, x: float, y: float, speed: float = settings.ENEMY_SPEED) -> None:
         super().__init__(name, surf, x, y, speed)
-        self.current_playing_sound: Optional[pygame.mixer.Sound] = None
+        self.current_playing_sound: Optional[pygame.mixer.Sound | DummySound] = None
 
     def take_damage(self, amount: int) -> None:
         """Inflicts damage, resets frame counter and updates state."""
@@ -107,8 +107,9 @@ class BasicEnemy(Enemy):
         elif self._state == 'run_attack' and self.run_attack_frames:
             return self.run_attack_frames
         elif self._state == 'attack':
-            idx = min(self._current_attack_index, len(self.attack_animations) - 1)
-            return self.attack_animations[idx]
+            if self.attack_animations:
+                idx = min(self._current_attack_index, len(self.attack_animations) - 1)
+                return self.attack_animations[idx]
         elif self._state == 'hurt':
             return self.hurt_frames
         elif self._state == 'dead':
@@ -124,7 +125,7 @@ class BasicEnemy(Enemy):
         if self._state == 'dead':
             self._vel.x = 0.0
             self._current_frame += self._animation_speed * dt
-            if self._current_frame >= len(self.dead_frames) - 1:
+            if self.dead_frames and self._current_frame >= len(self.dead_frames) - 1:
                 self._current_frame = float(len(self.dead_frames) - 1)
                 self._death_timer += dt
                 if self._death_timer >= settings.ENEMY_DEATH_DELAY:
@@ -135,15 +136,19 @@ class BasicEnemy(Enemy):
         if self._state == 'hurt':
             self._vel.x = 0.0
             self._current_frame += self._animation_speed * dt
-            if self._current_frame >= len(self.hurt_frames) - 1:
+            if not self.hurt_frames or self._current_frame >= len(self.hurt_frames) - 1:
                 self._state = 'idle'
                 self._current_frame = 0.0
             return
 
         # Attack animation lock and state lifecycle
         if self._state in ['attack', 'run_attack']:
-            current_attack = self.attack_animations[self._current_attack_index] if self._state == 'attack' else self.run_attack_frames
-            if current_attack and self._current_frame >= len(current_attack) - 1:
+            current_attack = (
+                self.attack_animations[self._current_attack_index]
+                if (self._state == 'attack' and self.attack_animations)
+                else self.run_attack_frames
+            )
+            if not current_attack or self._current_frame >= len(current_attack) - 1:
                 self._state = 'idle'
                 self._current_frame = 0.0
                 self._attack_cooldown = settings.ENEMY_ATTACK_COOLDOWN
@@ -183,9 +188,11 @@ class BasicEnemy(Enemy):
                         self.current_playing_sound.stop()
 
                     if self._state == 'attack':
-                        self._current_attack_index = random.randint(0, len(self.attack_animations) - 1)
-                        self._vel.x = 0.0
-                        self.current_playing_sound = self.attack_sounds[self._current_attack_index]
+                        if self.attack_animations:
+                            self._current_attack_index = random.randint(0, len(self.attack_animations) - 1)
+                            self._vel.x = 0.0
+                            if self.attack_sounds and self._current_attack_index < len(self.attack_sounds):
+                                self.current_playing_sound = self.attack_sounds[self._current_attack_index]
                     else:
                         self._vel.x = 2.0 if dist_x > 0 else -2.0
                         self.current_playing_sound = self.run_attack_sound
@@ -243,9 +250,10 @@ class BasicEnemy(Enemy):
 
         self.hurtbox.midbottom = self._rect.midbottom
 
-        # Looping animation frame advancement
+        # Looping animation frame advancement (protected against zero length)
         active_frames = self._get_active_frames()
-        self._current_frame = (self._current_frame + self._animation_speed * dt) % len(active_frames)
+        if active_frames:
+            self._current_frame = (self._current_frame + self._animation_speed * dt) % len(active_frames)
 
     def _patrol_behavior(self, dt: float) -> None:
         """Patrol logic for passive roaming."""
@@ -260,7 +268,11 @@ class BasicEnemy(Enemy):
     def get_hitbox(self) -> Optional[pygame.Rect]:
         """Calculates offensive collision hitbox during active attack frames."""
         if (self._state == 'attack' or self._state == 'run_attack') and not self._attack_hit:
-            current_attack = self.attack_animations[self._current_attack_index] if self._state == 'attack' else self.run_attack_frames
+            current_attack = (
+                self.attack_animations[self._current_attack_index]
+                if (self._state == 'attack' and self.attack_animations)
+                else self.run_attack_frames
+            )
             if current_attack and self._current_frame >= len(current_attack) - 2:
                 if self.facing_right:
                     return pygame.Rect(self.hurtbox.left, self.hurtbox.centery - 20, 80, 40)
@@ -274,6 +286,9 @@ class BasicEnemy(Enemy):
     def draw(self, window: pygame.Surface) -> None:
         """Pure rendering method without side effects."""
         current_list = self._get_active_frames()
+        if not current_list:
+            return
+
         idx = int(self._current_frame)
         idx = max(0, min(idx, len(current_list) - 1))
         current_image = current_list[idx]
@@ -345,7 +360,7 @@ class DragonBoss(Enemy):
         if self._state == 'dead':
             self._vel.x = 0.0
             self._current_frame += self._animation_speed * dt
-            if self._current_frame >= len(self.dead_frames) - 1:
+            if self.dead_frames and self._current_frame >= len(self.dead_frames) - 1:
                 self._current_frame = float(len(self.dead_frames) - 1)
                 self._death_timer += dt
                 if self._death_timer >= settings.BOSS_DEATH_DELAY:
@@ -355,14 +370,14 @@ class DragonBoss(Enemy):
         if self._state == 'hurt':
             self._vel.x = 0.0
             self._current_frame += self._animation_speed * dt
-            if self._current_frame >= len(self.hurt_frames) - 1:
+            if not self.hurt_frames or self._current_frame >= len(self.hurt_frames) - 1:
                 self._state = 'idle'
                 self._current_frame = 0.0
             return
 
         if self._state == 'attack':
             self._current_frame += self._animation_speed * dt
-            if self._current_frame >= len(self.attack_frames) - 1:
+            if not self.attack_frames or self._current_frame >= len(self.attack_frames) - 1:
                 self._state = 'idle'
                 self._current_frame = 0.0
                 self._attack_cooldown = settings.BOSS_ATTACK_COOLDOWN
@@ -391,9 +406,10 @@ class DragonBoss(Enemy):
                         self._vel.x = direction * 1.5
                         self.facing_right = direction > 0
 
-            # Advance looping animation frames
+            # Advance looping animation frames safely
             current_list = self.walk_frames if self._state == 'run' else self.idle_frames
-            self._current_frame = (self._current_frame + self._animation_speed * dt) % len(current_list)
+            if current_list:
+                self._current_frame = (self._current_frame + self._animation_speed * dt) % len(current_list)
 
         self._vel.y += settings.GRAVITY * dt
         self._pos.x += self._vel.x * self._speed * dt
@@ -410,7 +426,7 @@ class DragonBoss(Enemy):
     def get_hitbox(self) -> Optional[pygame.Rect]:
         """Returns offensive boss hitbox during fire breath phase."""
         if self._state == 'attack' and not self._attack_hit:
-            if self._current_frame >= len(self.attack_frames) - 4:
+            if self.attack_frames and self._current_frame >= len(self.attack_frames) - 4:
                 if self.facing_right:
                     return pygame.Rect(self.hurtbox.right, self.hurtbox.centery - 50, 150, 100)
                 return pygame.Rect(self.hurtbox.left - 150, self.hurtbox.centery - 50, 150, 100)
@@ -425,24 +441,26 @@ class DragonBoss(Enemy):
         frame_idx = int(self._current_frame)
 
         if self._state == 'attack' and frame_idx >= len(self.base_attack_frames):
-            base_img = self.base_attack_frames[-1]
-            if not self.facing_right:
-                base_img = pygame.transform.flip(base_img, True, False)
-            window.blit(base_img, self._rect)
+            if self.base_attack_frames:
+                base_img = self.base_attack_frames[-1]
+                if not self.facing_right:
+                    base_img = pygame.transform.flip(base_img, True, False)
+                window.blit(base_img, self._rect)
 
-            fire_idx = min(frame_idx - len(self.base_attack_frames), len(self.fire_frames) - 1)
-            fire_img = self.fire_frames[fire_idx]
+            if self.fire_frames:
+                fire_idx = min(frame_idx - len(self.base_attack_frames), len(self.fire_frames) - 1)
+                fire_img = self.fire_frames[fire_idx]
 
-            if self.facing_right:
-                offset_x = 155
-                offset_y = 85
-            else:
-                offset_x = -27
-                offset_y = 85
-                fire_img = pygame.transform.flip(fire_img, True, False)
+                if self.facing_right:
+                    offset_x = 155
+                    offset_y = 85
+                else:
+                    offset_x = -27
+                    offset_y = 85
+                    fire_img = pygame.transform.flip(fire_img, True, False)
 
-            fire_pos = (self._rect.x + offset_x, self._rect.y + offset_y)
-            window.blit(fire_img, fire_pos)
+                fire_pos = (self._rect.x + offset_x, self._rect.y + offset_y)
+                window.blit(fire_img, fire_pos)
         else:
             current_list = self.idle_frames
             if self._state == 'run':
@@ -454,8 +472,9 @@ class DragonBoss(Enemy):
             elif self._state == 'dead':
                 current_list = self.dead_frames
 
-            idx = max(0, min(frame_idx, len(current_list) - 1))
-            current_image = current_list[idx]
-            if not self.facing_right:
-                current_image = pygame.transform.flip(current_image, True, False)
-            window.blit(current_image, self._rect)
+            if current_list:
+                idx = max(0, min(frame_idx, len(current_list) - 1))
+                current_image = current_list[idx]
+                if not self.facing_right:
+                    current_image = pygame.transform.flip(current_image, True, False)
+                window.blit(current_image, self._rect)

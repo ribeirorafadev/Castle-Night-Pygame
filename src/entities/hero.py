@@ -145,8 +145,9 @@ class Hero(Entity):
                 new_state = 'idle'
 
             # Animation lock resolution
-            current_list = state_map[self._state]
-            animation_finished = self._current_frame >= len(current_list) - 1
+            current_list = state_map.get(self._state, self.idle_frames)
+            total_frames = len(current_list)
+            animation_finished = total_frames == 0 or self._current_frame >= total_frames - 1
             if is_locked and not animation_finished:
                 new_state = self._state
             elif is_locked and animation_finished:
@@ -168,14 +169,16 @@ class Hero(Entity):
             elif new_state == 'dead':
                 self.sfx_death.play()
 
-        # Advance animation frame
-        current_list = state_map[self._state]
-        self._current_frame += self._animation_speed * dt
-        if self._state == 'dead':
-            if self._current_frame >= len(current_list) - 1:
-                self._current_frame = float(len(current_list) - 1)
-        else:
-            self._current_frame %= len(current_list)
+        # Advance animation frame safely
+        current_list = state_map.get(self._state, self.idle_frames)
+        total_frames = len(current_list)
+        if total_frames > 0:
+            self._current_frame += self._animation_speed * dt
+            if self._state == 'dead':
+                if self._current_frame >= total_frames - 1:
+                    self._current_frame = float(total_frames - 1)
+            else:
+                self._current_frame %= total_frames
 
         # Physics simulation
         self._vel.y += self._gravity * dt
@@ -205,6 +208,9 @@ class Hero(Entity):
         """Pure rendering method. Renders current active frame without side-effects."""
         state_map = self._get_state_map()
         current_list = state_map.get(self._state, self.idle_frames)
+        if not current_list:
+            return
+
         idx = int(self._current_frame)
         idx = max(0, min(idx, len(current_list) - 1))
         current_image = current_list[idx]
@@ -218,7 +224,7 @@ class Hero(Entity):
         """Returns offensive weapon hitbox during the active strike window."""
         if self._state in ['attack1', 'attack2', 'run_attack'] and not self._attack_hit:
             current_list = self.attack1_frames
-            if self._current_frame >= len(current_list) - 2:
+            if current_list and self._current_frame >= len(current_list) - 2:
                 if self.facing_right:
                     return pygame.Rect(self.hurtbox.right, self.hurtbox.centery - 20, 40, 40)
                 return pygame.Rect(self.hurtbox.left - 40, self.hurtbox.centery - 20, 40, 40)

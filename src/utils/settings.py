@@ -1,4 +1,8 @@
-"""Centralized game settings and configuration constants for Castle Night."""
+"""Centralized game settings and configuration constants for Castle Night.
+
+Defines global balance values, display dimensions, physics constants, entity statistics,
+AI perception thresholds, animation playback rates, and user interface geometry.
+"""
 
 # Screen and Display Settings
 SCREEN_WIDTH: int = 800
