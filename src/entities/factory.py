@@ -31,7 +31,7 @@ class EntityFactory:
 
         Args:
             enemy_type: Identifier string for the enemy archetype ('boss-dragon', 'minotaur',
-                'wizard', 'skeleton', 'werewolf', 'yokai').
+                'wizard', 'satyr', 'samurai-commander', 'yokai').
             x: Initial horizontal world coordinate in pixels.
             y: Initial vertical world coordinate in pixels.
 
@@ -57,20 +57,17 @@ class EntityFactory:
                     "audio/Attack-FireBall.mp3",
                 ],
             },
-            "skeleton": {
+            "satyr": {
+                "attacks": ["Attack.png"],
+                "attack_sounds": ["audio/Attack-Sword-Enemy.mp3"],
+            },
+            "samurai-commander": {
                 "run": "Run.png",
-                "run_attack": "Run+attack.png",
+                "jump": "Jump.png",
+                "run_attack": "Protect.png",
                 "attacks": ["Attack_1.png", "Attack_2.png", "Attack_3.png"],
                 "attack_sounds": ["audio/Attack-Sword-Enemy.mp3"] * 3,
                 "run_attack_sound": "audio/Attack-Sword-Enemy.mp3",
-            },
-            "werewolf": {
-                "run": "Run.png",
-                "jump": "Jump.png",
-                "run_attack": "Run+Attack.png",
-                "attacks": ["Attack_1.png", "Attack_2.png", "Attack_3.png"],
-                "attack_sounds": ["audio/Attack-Werewolf.mp3"] * 3,
-                "run_attack_sound": "audio/Attack-Werewolf.mp3",
             },
             "yokai": {
                 "run": "Run.png",
