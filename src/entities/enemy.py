@@ -273,7 +273,7 @@ class BasicEnemy(Enemy):
                 if (self._state == 'attack' and self.attack_animations)
                 else self.run_attack_frames
             )
-            if current_attack and self._current_frame >= len(current_attack) - 2:
+            if current_attack and self._current_frame >= max(1, len(current_attack) // 2):
                 if self.facing_right:
                     return pygame.Rect(self.hurtbox.left, self.hurtbox.centery - 20, 80, 40)
                 return pygame.Rect(self.hurtbox.right - 80, self.hurtbox.centery - 20, 80, 40)
