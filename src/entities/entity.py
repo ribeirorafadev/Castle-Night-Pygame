@@ -28,6 +28,12 @@ class Entity(ABC):
         self._is_removable: bool = False
         self._speed: float = speed
         self._target: Optional[Entity] = None
+        self._state: str = "idle"
+
+    @property
+    def state(self) -> str:
+        """Read-only access to entity FSM state."""
+        return self._state
 
     @property
     def name(self) -> str:

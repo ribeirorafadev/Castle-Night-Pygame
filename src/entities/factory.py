@@ -58,16 +58,17 @@ class EntityFactory:
                 ],
             },
             "satyr": {
+                "run": "Charge.png",
+                "run_attack": "Charge.png",
                 "attacks": ["Attack.png"],
                 "attack_sounds": ["audio/Attack-Sword-Enemy.mp3"],
+                "run_attack_sound": "audio/Attack-Sword-Enemy.mp3",
             },
             "samurai-commander": {
                 "run": "Run.png",
                 "jump": "Jump.png",
-                "run_attack": "Protect.png",
                 "attacks": ["Attack_1.png", "Attack_2.png", "Attack_3.png"],
                 "attack_sounds": ["audio/Attack-Sword-Enemy.mp3"] * 3,
-                "run_attack_sound": "audio/Attack-Sword-Enemy.mp3",
             },
             "yokai": {
                 "run": "Run.png",
