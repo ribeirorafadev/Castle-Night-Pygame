@@ -1,29 +1,52 @@
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
+# ==============================================================================
+# SEGURANÇA: Chaves, Credenciais e Segredos (CWE-312 / CWE-798)
+# ==============================================================================
+.env
+.env.*
+*.env
+*.pem
+*.key
+*.pfx
+*.pkcs12
+secrets.json
+credentials.json
+id_rsa*
+id_ed25519*
 
-# PyInstaller / Build
+# ==============================================================================
+# BUILDS & BINÁRIOS (Evita comitar executáveis gigantes no histórico Git)
+# ==============================================================================
 build/
 dist/
 *.spec
 *.exe
+*.bin
+*.so
+*.pyd
+*.dll
+*.tar.gz
+*.zip
 
-# Ambientes Virtuais
+# ==============================================================================
+# BYTECODE PYTHON & AMBIENTES VIRTUAIS
+# ==============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
 .venv/
 venv/
 ENV/
 env/
 
-# IDEs e Editores
+# ==============================================================================
+# IDES & HISTÓRICO LOCAL (Evita vazar caminhos absolutos da máquina)
+# ==============================================================================
 .vscode/
 .idea/
 .cursor/
 .cursorrules
 *.swp
 *.swo
-
-# Logs e Dados OS
-*.log
 .DS_Store
 Thumbs.db
+*.log
